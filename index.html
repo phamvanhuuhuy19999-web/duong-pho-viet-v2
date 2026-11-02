@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#17352f"><title>Đường Phố Việt v2</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#17352f;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+canvas{display:block;width:100vw;height:100dvh;touch-action:none;background:#4b9564}
+.panel{position:fixed;z-index:3;background:#112b29ed;border:1px solid #ffffff35;border-radius:15px;padding:9px;box-shadow:0 7px 25px #0004}
+#join{inset:0;display:grid;place-items:center;background:#071e1df2;z-index:10}.card{width:min(91vw,390px);padding:22px;border-radius:22px;background:#1c4138;border:1px solid #ffffff35}
+h1{font-size:27px;margin:0 0 5px}p{color:#c9e5d8;font-size:13px;line-height:1.4}
+input,select,button{font:inherit;border:0;border-radius:11px;padding:11px;width:100%;margin-top:8px}
+input,select{background:#f2fff7;color:#16352d}button{background:#ffc45b;color:#34240a;font-weight:800}
+#top{top:8px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:center;gap:5px;pointer-events:none;font-size:11px}
+#top strong{font-size:13px}#chatbox{left:8px;bottom:9px;width:min(235px,56vw);padding:8px}
+#messages{height:57px;overflow:auto;font-size:11px;color:#eaffef}#chatrow{display:flex;gap:5px}
+#chatrow input{margin:0;min-width:0;padding:7px}#chatrow button{margin:0;width:48px;padding:7px}
+#controls{position:fixed;right:9px;bottom:17px;display:flex;gap:6px;align-items:end;z-index:4}
+.drive{width:59px;height:59px;border-radius:50%;background:#183b36e8;color:white;border:2px solid #ffffff70;font-size:21px;padding:0;touch-action:none}
+#gas{width:70px;height:70px;background:#b34f36ed}#brake{background:#345f80ed}
+#actions{position:fixed;top:62px;right:9px;display:flex;gap:5px;z-index:4}
+.small{width:auto;padding:8px 10px;margin:0;background:#153c35eF;color:#fff;border:1px solid #ffffff55;font-size:11px}
+#garage{display:none;position:fixed;z-index:8;inset:12% 5%;max-height:76%;overflow:auto;background:#143630f5;border:1px solid #ffffff55;border-radius:18px;padding:15px}
+#garage h2{margin:0 0 8px} .bikeRow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #ffffff20}
+.bikeRow .desc{flex:1;font-size:12px}.bikeRow button{width:auto;min-width:86px;margin:0;padding:8px}
+#closeGarage{background:#a64c3e;color:white;width:100%}
+#toast{position:fixed;top:115px;left:50%;transform:translateX(-50%);z-index:5;background:#102b2aeb;padding:9px 14px;border-radius:12px;font-size:12px;display:none;text-align:center}
+@media(min-width:800px){#controls{opacity:.7}}
+</style></head><body>
+<canvas id="game"></canvas>
+<div id="join"><div class="card">
+<div style="font-size:38px">🏍️ 🇻🇳 🏁</div><h1>ĐƯỜNG PHỐ VIỆT v2</h1>
+<p>Đua xe máy cùng bạn bè, mua xe, nâng cấp pô và khám phá phố Việt.</p>
+<input id="name" maxlength="18" value="Tay đua" placeholder="Tên nhân vật">
+<input id="room" maxlength="12" value="PHOVIET" placeholder="Mã phòng">
+<button id="play">VÀO THẾ GIỚI</button>
+<p style="font-size:11px">Bản demo arcade 2D. Cảnh sát và xử phạt chỉ là cơ chế trong game; hãy tuân thủ luật giao thông ngoài đời.</p>
+</div></div>
+<div id="top" class="panel"><strong>🏍️ ĐƯỜNG PHỐ VIỆT</strong><span>Phòng <b id="roomLabel">—</b></span><span>🪙 <b id="money">0</b></span><span>👥 <b id="count">0</b></span><span id="status">Offline</span></div>
+<div id="actions"><button class="small" id="garageBtn">🔧 Gara</button><button class="small" id="mapBtn">🗺️ Bản đồ</button></div>
+<div id="toast"></div>
+<div id="garage"><h2>🔧 GARA & CỬA HÀNG</h2><div id="garageInfo" style="font-size:12px;color:#cbe8d8"></div><div id="bikeList"></div><div class="bikeRow"><div class="desc"><b>Ống pô thể thao</b><br>Nâng cấp tối đa 3 cấp · tăng tốc độ tối đa một chút.</div><button id="exhaustBtn">Nâng 2.500 xu</button></div><button id="closeGarage">ĐÓNG GARA</button></div>
+<div id="chatbox" class="panel"><div id="messages">💬 Chào mừng đến phố Việt!</div><div id="chatrow"><input id="chat" maxlength="100" placeholder="Nhắn tin..."><button id="send">Gửi</button></div></div>
+<div id="controls"><button class="drive" id="left">◀</button><button class="drive" id="brake">▾</button><button class="drive" id="right">▶</button><button class="drive" id="gas">▲</button></div>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=2200,H=1500,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+let ws=null,me=null,room='',players=[],profile={money:5000,owned:['Wave'],bike:'Wave',exhaust:0};
+let x=1120,y=1240,angle=-Math.PI/2,speed=0,keys={},touch={},lastNet=0,lastTime=0,lastReward=0,lap=0,checkpoint=false,showMap=false;
+const catalog={
+ Wave:{price:0,base:5.2,emoji:'🛵',label:'Honda Wave',desc:'Xe số phổ thông · dễ điều khiển'},
+ Exciter:{price:8500,base:7.2,emoji:'🏍️',label:'Yamaha Exciter',desc:'Xe côn tay · tốc độ cao'},
+ Vario:{price:10500,base:6.7,emoji:'🛵',label:'Honda Vario',desc:'Tay ga · linh hoạt'},
+ Winner:{price:12500,base:7.6,emoji:'🏍️',label:'Honda Winner',desc:'Xe côn tay · tốc độ tối đa cao'}
+};
+function resize(){canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+addEventListener('resize',resize);resize();
+function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
+function toast(t){let e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>e.style.display='none',2400)}
+function say(t){let e=document.getElementById('messages');let d=document.createElement('div');d.textContent=t;e.appendChild(d);e.scrollTop=e.scrollHeight;while(e.children.length>30)e.removeChild(e.firstChild)}
+function updateProfile(m){profile={...profile,...m};document.getElementById('money').textContent=profile.money.toLocaleString('vi-VN');renderGarage()}
+function renderGarage(){
+ document.getElementById('garageInfo').textContent=`Số dư: ${profile.money.toLocaleString('vi-VN')} xu · Xe đang dùng: ${profile.bike} · Pô cấp ${profile.exhaust}/3`;
+ const list=document.getElementById('bikeList');list.replaceChildren();
+ Object.entries(catalog).forEach(([id,b])=>{
+  const row=document.createElement('div');row.className='bikeRow';
+  const desc=document.createElement('div');desc.className='desc';
+  desc.innerHTML=`<b>${b.emoji} ${b.label}</b><br>${b.desc}<br><span style="color:#ffd47b">Giá: ${b.price.toLocaleString('vi-VN')} xu</span>`;
+  const btn=document.createElement('button');
+  if(profile.owned.includes(id)){btn.textContent=profile.bike===id?'Đang chạy':'Chọn xe';btn.disabled=profile.bike===id;btn.onclick=()=>send({type:'selectBike',bike:id})}
+  else{btn.textContent='Mua xe';btn.onclick=()=>send({type:'buy',bike:id})}
+  row.append(desc,btn);list.append(row);
+ });
+ document.getElementById('exhaustBtn').textContent=profile.exhaust>=3?'Đã tối đa':'Nâng 2.500 xu';
+ document.getElementById('exhaustBtn').disabled=profile.exhaust>=3;
+}
+document.getElementById('play').onclick=()=>{
+ room=document.getElementById('room').value.trim()||'PHOVIET';
+ ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host);
+ ws.onopen=()=>{document.getElementById('status').textContent='● Online';send({type:'join',name:document.getElementById('name').value,room})};
+ ws.onclose=()=>document.getElementById('status').textContent='● Mất kết nối';
+ ws.onerror=()=>toast('Không kết nối được máy chủ.');
+ ws.onmessage=e=>{let m=JSON.parse(e.data);
+  if(m.type==='joined'){me=m.id;players=m.players;document.getElementById('roomLabel').textContent=m.room;document.getElementById('join').style.display='none';say('Bạn đã vào thế giới!')}
+  if(m.type==='profile')updateProfile(m);
+  if(m.type==='state'){players=m.players;document.getElementById('count').textContent=players.length}
+  if(m.type==='notice')toast(m.text);
+  if(m.type==='reward')toast(m.text);
+  if(m.type==='chat')say('💬 '+m.name+': '+m.text);
+ };
+};
+document.getElementById('garageBtn').onclick=()=>{document.getElementById('garage').style.display='block';renderGarage()};
+document.getElementById('closeGarage').onclick=()=>document.getElementById('garage').style.display='none';
+document.getElementById('exhaustBtn').onclick=()=>send({type:'upgradeExhaust'});
+document.getElementById('mapBtn').onclick=()=>{showMap=!showMap;toast(showMap?'Đang bật bản đồ nhỏ':'Đã tắt bản đồ nhỏ')};
+function chat(){let e=document.getElementById('chat');if(e.value.trim()){send({type:'chat',text:e.value.trim()});e.value=''}}
+document.getElementById('send').onclick=chat;document.getElementById('chat').addEventListener('keydown',e=>{if(e.key==='Enter')chat()});
+addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+[['left','ArrowLeft'],['right','ArrowRight'],['gas','ArrowUp'],['brake','ArrowDown']].forEach(([id,k])=>{
+ let el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();touch[k]=true});
+ ['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,()=>touch[k]=false));
+});
+function drawRoad(){
+ ctx.fillStyle='#579968';ctx.fillRect(0,0,W,H);
+ // Residential blocks, sidewalks and greenery
+ for(let i=0;i<48;i++){
+  let bx=(i*317+80)%W,by=(i*229+40)%H;
+  ctx.fillStyle=i%3===0?'#d8b98c':i%3===1?'#e6d2a8':'#b8c9a0';
+  ctx.fillRect(bx,by,95,70);
+  ctx.fillStyle='#aa6650';ctx.fillRect(bx+12,by+10,25,22);ctx.fillRect(bx+55,by+10,25,22);
+  ctx.fillStyle='#236b48';ctx.beginPath();ctx.arc((bx+130)%W,(by+45)%H,18,0,7);ctx.fill();
+ }
+ // City road loop
+ ctx.lineWidth=280;ctx.strokeStyle='#777b7b';ctx.beginPath();ctx.ellipse(1100,750,850,570,0,0,Math.PI*2);ctx.stroke();
+ ctx.lineWidth=7;ctx.strokeStyle='#f5e8b7';ctx.setLineDash([35,28]);ctx.beginPath();ctx.ellipse(1100,750,850,570,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+ ctx.lineWidth=5;ctx.strokeStyle='#e8e8d9';ctx.beginPath();ctx.ellipse(1100,750,700,420,0,0,Math.PI*2);ctx.stroke();
+ // Vietnamese street features
+ ctx.font='bold 30px system-ui';ctx.fillStyle='#173c2a';ctx.fillText('PHỐ CỔ',900,720);
+ ctx.font='26px system-ui';ctx.fillText('🏪',280,620);ctx.fillText('☕',1750,520);ctx.fillText('🌳',1080,130);ctx.fillText('🛕',1800,1050);ctx.fillText('🏘️',400,1120);
+ // crosswalk
+ ctx.fillStyle='#eee';for(let i=0;i<7;i++)ctx.fillRect(1080+i*20,1110,12,70);
+ // traffic lights
+ ctx.fillStyle='#252525';ctx.fillRect(1370,310,12,65);['#e94e4e','#e6c64d','#59bd75'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(1376,320+i*20,6,0,7);ctx.fill()});
+ // start/finish stripe
+ ctx.fillStyle='#fff';for(let i=0;i<10;i++)ctx.fillRect(1050+i*22,1215,12,30);
+}
+function drawBike(p,isMe){
+ ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.angle+Math.PI/2);
+ ctx.fillStyle='#0005';ctx.beginPath();ctx.ellipse(3,7,13,25,0,0,7);ctx.fill();
+ ctx.fillStyle='#171b1b';ctx.fillRect(-7,-25,14,14);ctx.fillRect(-7,13,14,14);
+ ctx.fillStyle=p.color;ctx.beginPath();ctx.roundRect(-10,-19,20,37,8);ctx.fill();
+ ctx.fillStyle='#f5e9c5';ctx.fillRect(-6,-18,12,5);
+ ctx.fillStyle='#e44e3e';ctx.fillRect(-5,13,10,4);
+ ctx.fillStyle='#f2c69a';ctx.beginPath();ctx.arc(0,-3,6,0,7);ctx.fill();
+ if(p.exhaust>0){ctx.fillStyle='#b7c1c0';ctx.beginPath();ctx.arc(12,18,3+p.exhaust,0,7);ctx.fill()}
+ ctx.restore();
+ ctx.textAlign='center';ctx.font='bold 13px system-ui';ctx.fillStyle='#142f25';ctx.fillText(p.name+' · '+p.bike,p.x,p.y-34);
+ if(p.wanted>0){ctx.font='17px system-ui';ctx.fillText('🚨',p.x,p.y-48)}
+ if(isMe){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,26,0,7);ctx.stroke()}
+}
+const police=[{x:470,y:750,a:0},{x:1780,y:900,a:Math.PI}];
+function drawPolice(){
+ police.forEach((p,i)=>{ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);ctx.fillStyle='#182d48';ctx.fillRect(-13,-20,26,42);ctx.fillStyle='#fff';ctx.fillRect(-9,-15,18,13);ctx.fillStyle='#f44';ctx.fillRect(-12,-22,10,5);ctx.fillStyle='#48aaff';ctx.fillRect(2,-22,10,5);ctx.restore();ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText('🚔 CSGT',p.x,p.y-28)});
+}
+function miniMap(){
+ if(!showMap)return;
+ const mw=145,mh=100,ox=innerWidth-mw-12,oy=innerHeight-125;
+ ctx.fillStyle='#0b2928dd';ctx.fillRect(ox,oy,mw,mh);
+ ctx.strokeStyle='#eee';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(ox+mw/2,oy+mh/2,mw*.39,mh*.36,0,0,7);ctx.stroke();
+ players.forEach(p=>{ctx.fillStyle=p.id===me?'#fff':p.color;ctx.beginPath();ctx.arc(ox+p.x/W*mw,oy+p.y/H*mh,3,0,7);ctx.fill()});
+}
+function frame(t){
+ let dt=Math.min((t-lastTime)/16.67||1,2);lastTime=t;
+ if(me){
+  const down=k=>keys[k.toLowerCase()]||touch[k];
+  let bike=catalog[profile.bike]||catalog.Wave;
+  let max=(bike.base+profile.exhaust*.32);
+  if(down('ArrowUp')||down('w'))speed=Math.min(max,speed+.12*dt);else speed=Math.max(0,speed-.025*dt);
+  if(down('ArrowDown')||down('s'))speed=Math.max(0,speed-.2*dt);
+  let turn=(down('ArrowLeft')||down('a')?-1:0)+(down('ArrowRight')||down('d')?1:0);
+  angle+=turn*.045*(.35+speed/max)*dt*(bike.handling||1);
+  x=clamp(x+Math.cos(angle)*speed*dt*3,25,W-25);y=clamp(y+Math.sin(angle)*speed*dt*3,25,H-25);
+  let self=players.find(p=>p.id===me);if(self){self.x=x;self.y=y;self.angle=angle;self.bike=profile.bike;self.exhaust=profile.exhaust}
+  // Loop completion zone near start/finish; cooldown reward.
+  if(Math.hypot(x-1100,y-1215)<95 && t-lastReward>10000 && speed>1.5){
+    if(checkpoint){send({type:'reward'});lastReward=t;checkpoint=false;lap++;}
+  } else if(Math.hypot(x-1100,y-750)>350){checkpoint=true}
+  // Police patrols are game-only NPCs; close pass triggers in-game fine.
+  police.forEach((p,i)=>{p.a+=.002*dt;p.x=clamp(p.x+Math.cos(p.a)*.3,80,W-80);p.y=clamp(p.y+Math.sin(p.a)*.3,80,H-80);
+    if(Math.hypot(x-p.x,y-p.y)<48 && speed>5 && t-(window.lastPolice||0)>9000){send({type:'policeCaught'});window.lastPolice=t;speed*=.5}
+  });
+  if(t-lastNet>85){send({type:'move',x,y,angle,lap});lastNet=t}
+ }
+ let cw=innerWidth,ch=innerHeight,self=players.find(p=>p.id===me);
+ let camX=self?clamp(self.x-cw/2,0,W-cw):0,camY=self?clamp(self.y-ch/2,0,H-ch):0;
+ ctx.clearRect(0,0,cw,ch);ctx.save();ctx.translate(-camX,-camY);drawRoad();drawPolice();players.forEach(p=>drawBike(p,p.id===me));ctx.restore();
+ // Speedometer
+ ctx.fillStyle='#102b2be8';ctx.beginPath();ctx.roundRect(cw-105,72,95,43,12);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 15px system-ui';ctx.textAlign='center';ctx.fillText(Math.round(speed*24)+' km/h',cw-57,99);
+ miniMap();requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
